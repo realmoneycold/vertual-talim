@@ -1,0 +1,22 @@
+# Exclude environment variables and keys
+.env
+*.env
+
+# Exclude virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Exclude python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Exclude system and IDE files
+.DS_Store
+.vscode/
+.idea/
+*.log
+sqlite.db
+allowed_users.txt.bak
