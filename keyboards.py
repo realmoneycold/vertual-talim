@@ -5,14 +5,39 @@ from database import Database
 
 db = Database()
 
-def get_courses_keyboard() -> types.ReplyKeyboardMarkup:
-    """Returns the main courses reply keyboard fetched dynamically from the database."""
-    kb = ReplyKeyboardBuilder()
+def get_courses_keyboard(page: int = 1, limit: int = 6) -> types.ReplyKeyboardMarkup:
+    """Returns a paginated reply keyboard for courses (6 per page) with navigation."""
     courses = db.get_all_courses()
-    for course in courses:
-        kb.button(text=course['name'])
+    total_courses = len(courses)
+    total_pages = (total_courses + limit - 1) // limit if total_courses > 0 else 1
+    page = max(1, min(page, total_pages))
+    
+    start_idx = (page - 1) * limit
+    end_idx = min(start_idx + limit, total_courses)
+    page_courses = courses[start_idx:end_idx]
+    
+    builder = ReplyKeyboardBuilder()
+    for course in page_courses:
+        builder.button(text=course['name'])
+    builder.adjust(2)
+    
+    nav_builder = ReplyKeyboardBuilder()
+    if page > 1:
+        nav_builder.button(text="◀️ Oldingi")
+    if page < total_pages:
+        nav_builder.button(text="Keyingi ▶️")
+    nav_builder.adjust(2)
+    
+    builder.attach(nav_builder)
+    return builder.as_markup(resize_keyboard=True)
+
+def get_tests_inline_keyboard(course_id: int) -> types.InlineKeyboardMarkup:
+    """Returns an inline keyboard with 5 test buttons for the selected course."""
+    kb = InlineKeyboardBuilder()
+    for i in range(1, 6):
+        kb.button(text=f"{i} - test", callback_data=f"user_test_select_{course_id}_{i}")
     kb.adjust(2)
-    return kb.as_markup(resize_keyboard=True)
+    return kb.as_markup()
 
 def get_webapp_keyboard(webapp_url: str = Config.WEBAPP_URL) -> types.InlineKeyboardMarkup:
     """Returns the inline keyboard to open WebApp."""
