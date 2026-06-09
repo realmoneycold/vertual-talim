@@ -31,13 +31,32 @@ def get_courses_keyboard(page: int = 1, limit: int = 6) -> types.ReplyKeyboardMa
     builder.attach(nav_builder)
     return builder.as_markup(resize_keyboard=True)
 
-def get_tests_inline_keyboard(course_id: int) -> types.InlineKeyboardMarkup:
-    """Returns an inline keyboard with dynamic test buttons for the selected course fetched from the database."""
+def get_tests_inline_keyboard(course_id: int, page: int = 1, limit: int = 10) -> types.InlineKeyboardMarkup:
+    """Returns a paginated inline keyboard with dynamic test buttons for the selected course."""
     kb = InlineKeyboardBuilder()
     tests = db.get_tests_for_course(course_id)
-    for t in tests:
+    total_tests = len(tests)
+    total_pages = (total_tests + limit - 1) // limit if total_tests > 0 else 1
+    page = max(1, min(page, total_pages))
+    
+    start_idx = (page - 1) * limit
+    end_idx = min(start_idx + limit, total_tests)
+    page_tests = tests[start_idx:end_idx]
+    
+    for t in page_tests:
         kb.button(text=t['name'], callback_data=f"user_test_select_{course_id}_{t['id']}")
     kb.adjust(2)
+    
+    # Pagination
+    nav_kb = InlineKeyboardBuilder()
+    if page > 1:
+        nav_kb.button(text="◀️ Oldingi", callback_data=f"user_test_page_{course_id}_{page - 1}")
+    nav_kb.button(text=f"📄 {page}/{total_pages}", callback_data="user_test_noop")
+    if page < total_pages:
+        nav_kb.button(text="Keyingi ▶️", callback_data=f"user_test_page_{course_id}_{page + 1}")
+    nav_kb.adjust(3)
+    
+    kb.attach(nav_kb)
     return kb.as_markup()
 
 def get_webapp_keyboard(webapp_url: str = Config.WEBAPP_URL) -> types.InlineKeyboardMarkup:

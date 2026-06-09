@@ -72,7 +72,7 @@ async def course_handler(message: types.Message, state: FSMContext):
             await message.answer(
                 f"📝 <b>Iltimos, testni tanlang:</b>",
                 parse_mode="HTML",
-                reply_markup=get_tests_inline_keyboard(course['id'])
+                reply_markup=get_tests_inline_keyboard(course_id=course['id'], page=1)
             )
         else:
             await message.answer(
@@ -105,4 +105,34 @@ async def user_test_select_callback(callback: types.CallbackQuery):
         parse_mode="HTML",
         reply_markup=get_webapp_keyboard(test['webapp_url'])
     )
+    await callback.answer()
+
+
+# --- Handle Test List Inline Pagination ---
+@router.callback_query(F.data.startswith("user_test_page_"))
+async def user_test_page_callback(callback: types.CallbackQuery):
+    parts = callback.data.split("_")
+    course_id = int(parts[3])
+    page = int(parts[4])
+    
+    courses = db.get_all_courses()
+    course = next((c for c in courses if c['id'] == course_id), None)
+    if not course:
+        return await callback.answer("Kurs topilmadi!", show_alert=True)
+    
+    tests = db.get_tests_for_course(course_id)
+    total_tests = len(tests)
+    limit = 10
+    total_pages = (total_tests + limit - 1) // limit if total_tests > 0 else 1
+    page = max(1, min(page, total_pages))
+    
+    await callback.message.edit_text(
+        f"📝 <b>Iltimos, testni tanlang:</b> <i>(Sahifa {page}/{total_pages})</i>",
+        parse_mode="HTML",
+        reply_markup=get_tests_inline_keyboard(course_id=course_id, page=page)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "user_test_noop")
+async def user_test_noop_callback(callback: types.CallbackQuery):
     await callback.answer()
