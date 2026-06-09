@@ -310,10 +310,11 @@ class Database:
             return False
 
     def delete_course(self, course_id: int) -> bool:
-        """Deletes a course from the database by its ID."""
+        """Deletes a course and all its tests from the database by its ID."""
         try:
             with self._connect() as conn:
                 with conn.cursor() as cursor:
+                    cursor.execute(f"DELETE FROM tests WHERE course_id = {self.q}", (course_id,))
                     cursor.execute(f"DELETE FROM courses WHERE id = {self.q}", (course_id,))
                 conn.commit()
             self.resequence_courses()

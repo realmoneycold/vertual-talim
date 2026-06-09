@@ -483,6 +483,7 @@ def get_course_tests_list_page(course: dict, tests: list[dict], course_idx: int,
     
     action_kb = InlineKeyboardBuilder()
     action_kb.button(text="➕ Test qo'shish", callback_data=f"admin_test_add_{course['id']}_{course_idx}_{course_page}")
+    action_kb.button(text="❌ Kursni o'chirish", callback_data=f"admin_course_delete_from_list_{course['id']}_{course_idx}_{course_page}")
     action_kb.button(text="⬅️ Kurslar ro'yxatiga qaytish", callback_data=f"admin_course_page_{course_page}")
     action_kb.adjust(1)
     
@@ -816,3 +817,26 @@ async def admin_test_delete_callback(callback: types.CallbackQuery):
             pass
     else:
         await callback.answer("❌ Testni o'chirib bo'lmadi.", show_alert=True)
+
+
+# --- Delete Course from Tests List ---
+@router.callback_query(F.data.startswith("admin_course_delete_from_list_"))
+async def admin_course_delete_from_list_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("Ruxsat yo'q!", show_alert=True)
+        
+    parts = callback.data.split("_")
+    course_id = int(parts[5])
+    course_page = int(parts[7])
+    
+    success = db.delete_course(course_id)
+    if success:
+        await callback.answer("✅ Kurs va uning ichidagi barcha testlar o'chirildi!", show_alert=True)
+        courses = db.get_all_courses()
+        text, kb = get_courses_list_page(courses, page=course_page)
+        try:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+    else:
+        await callback.answer("❌ Kursni o'chirib bo'lmadi.", show_alert=True)
