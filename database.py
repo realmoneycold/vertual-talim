@@ -272,7 +272,8 @@ class Database:
                         VALUES ({self.q}, {self.q}, {self.q})
                     """, (name, description, webapp_url))
                 conn.commit()
-                return True
+            self.resequence_courses()
+            return True
         except Exception:
             return False
 
@@ -283,8 +284,44 @@ class Database:
                 with conn.cursor() as cursor:
                     cursor.execute(f"DELETE FROM courses WHERE id = {self.q}", (course_id,))
                 conn.commit()
-                return True
+            self.resequence_courses()
+            return True
         except Exception:
+            return False
+
+    def resequence_courses(self) -> bool:
+        """Re-numbers and re-names all courses sequentially based on ID order."""
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id, name, description, webapp_url FROM courses ORDER BY id ASC")
+                    rows = cursor.fetchall()
+                    
+                    courses = []
+                    for row in rows:
+                        if self.use_postgres:
+                            courses.append({
+                                "id": row[0],
+                                "name": row[1],
+                                "description": row[2],
+                                "webapp_url": row[3]
+                            })
+                        else:
+                            courses.append(dict(row))
+                            
+                    for index, c in enumerate(courses, start=1):
+                        new_name = f"{index}-kurs 📚"
+                        new_desc = f"{index}-kurs materiallari va darslari"
+                        cursor.execute(f"""
+                            UPDATE courses 
+                            SET name = {self.q}, description = {self.q} 
+                            WHERE id = {self.q}
+                        """, (new_name, new_desc, c["id"]))
+                conn.commit()
+            return True
+        except Exception as e:
+            import logging
+            logging.error(f"Error resequencing courses: {e}")
             return False
 
     def update_course_url(self, course_id: int, webapp_url: str | None) -> bool:
