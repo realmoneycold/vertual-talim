@@ -86,25 +86,23 @@ async def course_handler(message: types.Message, state: FSMContext):
 async def user_test_select_callback(callback: types.CallbackQuery):
     parts = callback.data.split("_")
     course_id = int(parts[3])
-    test_num = int(parts[4])
+    test_id = int(parts[4])
     
-    # Retrieve course details from db
+    # Retrieve course and tests from db
     courses = db.get_all_courses()
     course = next((c for c in courses if c['id'] == course_id), None)
     if not course:
         return await callback.answer("Kurs topilmadi!", show_alert=True)
         
-    # Safely construct the webapp URL with test parameter
-    base_url = course['webapp_url']
-    if "?" in base_url:
-        webapp_url_with_param = f"{base_url}&test={test_num}"
-    else:
-        webapp_url_with_param = f"{base_url}?test={test_num}"
+    tests = db.get_tests_for_course(course_id)
+    test = next((t for t in tests if t['id'] == test_id), None)
+    if not test:
+        return await callback.answer("Test topilmadi!", show_alert=True)
         
     await callback.message.answer(
-        f"🩺 <b>{course['name']} darslari, {test_num} - test.</b>\n\n"
+        f"🩺 <b>{course['name']} darslari, {test['name']}.</b>\n\n"
         f"Mavzularni ko'rish va o'rganish uchun quyidagi tugmani bosing:",
         parse_mode="HTML",
-        reply_markup=get_webapp_keyboard(webapp_url_with_param)
+        reply_markup=get_webapp_keyboard(test['webapp_url'])
     )
     await callback.answer()

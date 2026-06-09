@@ -32,10 +32,11 @@ def get_courses_keyboard(page: int = 1, limit: int = 6) -> types.ReplyKeyboardMa
     return builder.as_markup(resize_keyboard=True)
 
 def get_tests_inline_keyboard(course_id: int) -> types.InlineKeyboardMarkup:
-    """Returns an inline keyboard with 5 test buttons for the selected course."""
+    """Returns an inline keyboard with dynamic test buttons for the selected course fetched from the database."""
     kb = InlineKeyboardBuilder()
-    for i in range(1, 6):
-        kb.button(text=f"{i} - test", callback_data=f"user_test_select_{course_id}_{i}")
+    tests = db.get_tests_for_course(course_id)
+    for t in tests:
+        kb.button(text=t['name'], callback_data=f"user_test_select_{course_id}_{t['id']}")
     kb.adjust(2)
     return kb.as_markup()
 

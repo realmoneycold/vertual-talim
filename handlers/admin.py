@@ -13,9 +13,8 @@ db = Database()
 
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
-    waiting_for_course_name = State()
-    waiting_for_course_url = State()
-    waiting_for_course_edit_url = State()
+    waiting_for_test_url = State()
+    waiting_for_test_edit_url = State()
 
 # Middleware/Helper to verify if a user is admin
 def is_admin(user_id: int) -> bool:
@@ -409,9 +408,9 @@ async def direct_request_action_callback(callback: types.CallbackQuery, bot: Bot
     await callback.answer(f"✅ {status_msg} " + ("(Xabar yetkazildi)" if notification_sent else "(Xabar yetkazib bo'lmadi)"), show_alert=False)
 
 
-# --- helper tools for Courses Management ---
+# --- helper tools for Courses & Tests Management ---
 def get_courses_list_page(courses: list[dict], page: int, limit: int = 10) -> tuple[str, types.InlineKeyboardMarkup]:
-    """Generates a text list of courses for a specific page with selection, addition, and navigation buttons."""
+    """Generates a text list of courses (folders) with selection, addition, and navigation buttons."""
     total_courses = len(courses)
     total_pages = (total_courses + limit - 1) // limit if total_courses > 0 else 1
     
@@ -427,9 +426,7 @@ def get_courses_list_page(courses: list[dict], page: int, limit: int = 10) -> tu
     
     # Direct selection index buttons
     for index, c in enumerate(page_courses, start=start_idx + 1):
-        url_status = f"<code>{c['webapp_url']}</code>" if c['webapp_url'] else "❌ Havola yo'q"
-        text += f"<b>{index}. {c['name']}</b>\n   🔗 Havola: {url_status}\n\n"
-        
+        text += f"<b>{index}. {c['name']}</b> (Mavjuda darsliklar va testlar papkasi)\n\n"
         selection_kb.button(text=f"{index}", callback_data=f"admin_course_manage_{c['id']}_{index}_{page}")
         
     selection_kb.adjust(5)
@@ -445,7 +442,7 @@ def get_courses_list_page(courses: list[dict], page: int, limit: int = 10) -> tu
     
     # Options
     action_kb = InlineKeyboardBuilder()
-    action_kb.button(text="➕ Kurs qo'shish", callback_data="admin_course_add_auto")
+    action_kb.button(text="➕ Kurs qo'shish (folder)", callback_data="admin_course_add_auto")
     action_kb.button(text="⬅️ Admin panelga qaytish", callback_data="admin_panel_menu")
     action_kb.adjust(1)
     
@@ -453,23 +450,64 @@ def get_courses_list_page(courses: list[dict], page: int, limit: int = 10) -> tu
     selection_kb.attach(action_kb)
     return text, selection_kb.as_markup()
 
-def get_course_card(idx: int, c: dict, page: int) -> tuple[str, types.InlineKeyboardMarkup]:
-    """Generates the detailed card text and action buttons for a single course."""
+def get_course_tests_list_page(course: dict, tests: list[dict], course_idx: int, course_page: int, test_page: int = 1, limit: int = 10) -> tuple[str, types.InlineKeyboardMarkup]:
+    """Generates a list of tests for a specific course with test selection, addition, and pagination buttons."""
+    total_tests = len(tests)
+    total_pages = (total_tests + limit - 1) // limit if total_tests > 0 else 1
+    
+    test_page = max(1, min(test_page, total_pages))
+    start_idx = (test_page - 1) * limit
+    end_idx = min(start_idx + limit, total_tests)
+    
+    page_tests = tests[start_idx:end_idx]
+    
+    text = f"📂 <b>{course['name']} ichidagi testlar ({start_idx + 1}-{end_idx} / {total_tests}):</b>\n\n"
+    if not tests:
+        text += "<i>Hozircha testlar mavjud emas. Yangi test qo'shish uchun pastdagi tugmani bosing!</i>\n\n"
+        
+    selection_kb = InlineKeyboardBuilder()
+    for index, t in enumerate(page_tests, start=start_idx + 1):
+        text += f"<b>{index}. {t['name']}</b>\n   🔗 Havola: <code>{t['webapp_url']}</code>\n\n"
+        selection_kb.button(text=f"{index}", callback_data=f"admin_test_manage_{t['id']}_{course['id']}_{course_idx}_{course_page}_{index}_{test_page}")
+        
+    selection_kb.adjust(5)
+    
+    # Pagination for tests list
+    pagination_kb = InlineKeyboardBuilder()
+    if test_page > 1:
+        pagination_kb.button(text="◀️ Oldingi testlar", callback_data=f"admin_test_page_{course['id']}_{course_idx}_{course_page}_{test_page - 1}")
+    pagination_kb.button(text=f"📄 {test_page}/{total_pages}", callback_data="admin_noop")
+    if test_page < total_pages:
+        pagination_kb.button(text="Keyingi testlar ▶️", callback_data=f"admin_test_page_{course['id']}_{course_idx}_{course_page}_{test_page + 1}")
+    pagination_kb.adjust(3)
+    
+    action_kb = InlineKeyboardBuilder()
+    action_kb.button(text="➕ Test qo'shish", callback_data=f"admin_test_add_{course['id']}_{course_idx}_{course_page}")
+    action_kb.button(text="⬅️ Kurslar ro'yxatiga qaytish", callback_data=f"admin_course_page_{course_page}")
+    action_kb.adjust(1)
+    
+    selection_kb.attach(pagination_kb)
+    selection_kb.attach(action_kb)
+    return text, selection_kb.as_markup()
+
+def get_test_card(t: dict, course_name: str, course_idx: int, course_page: int, test_idx: int, test_page: int) -> tuple[str, types.InlineKeyboardMarkup]:
+    """Generates the detailed card text and action buttons for a single test."""
     text = (
-        f"📚 <b>Kurs #{idx} Tafsilotlari</b>\n\n"
-        f"• Nomi: <b>{c['name']}</b>\n"
-        f"• Havola: <code>{c['webapp_url'] or 'Kiritilmagan'}</code>"
+        f"📝 <b>Test Tafsilotlari</b>\n\n"
+        f"• Kurs: <b>{course_name}</b>\n"
+        f"• Test: <b>{t['name']}</b>\n"
+        f"• Havola: <code>{t['webapp_url']}</code>"
     )
     
     kb = InlineKeyboardBuilder()
-    kb.button(text="🔗 Havolani tahrirlash", callback_data=f"admin_course_edit_url_{c['id']}_{idx}_{page}")
-    kb.button(text="❌ Kursni o'chirish", callback_data=f"admin_course_delete_{c['id']}_{idx}_{page}")
-    kb.button(text="⬅️ Orqaga", callback_data=f"admin_course_page_{page}")
+    kb.button(text="🔗 Havolani tahrirlash", callback_data=f"admin_test_edit_url_{t['id']}_{t['course_id']}_{course_idx}_{course_page}_{test_idx}_{test_page}")
+    kb.button(text="❌ Testni o'chirish", callback_data=f"admin_test_delete_{t['id']}_{t['course_id']}_{course_idx}_{course_page}_{test_idx}_{test_page}")
+    kb.button(text="⬅️ Orqaga", callback_data=f"admin_test_list_{t['course_id']}_{course_idx}_{course_page}_{test_page}")
     kb.adjust(2, 1)
     return text, kb.as_markup()
 
 
-# --- Courses View callbacks & handlers ---
+# --- Courses Folders View callbacks & handlers ---
 @router.callback_query(F.data == "admin_list_courses_view")
 async def list_courses_view_callback(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -494,27 +532,8 @@ async def course_page_callback(callback: types.CallbackQuery):
         pass
     await callback.answer()
 
-@router.callback_query(F.data.startswith("admin_course_manage_"))
-async def course_manage_callback(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        return await callback.answer("Ruxsat yo'q!", show_alert=True)
-        
-    parts = callback.data.split("_")
-    course_id = int(parts[3])
-    idx = int(parts[4])
-    page = int(parts[5])
-    
-    courses = db.get_all_courses()
-    c = next((item for item in courses if item["id"] == course_id), None)
-    if not c:
-        return await callback.answer("Kurs topilmadi!", show_alert=True)
-        
-    text, kb = get_course_card(idx, c, page)
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
-    await callback.answer()
-
 @router.callback_query(F.data == "admin_course_add_auto")
-async def admin_course_add_auto_callback(callback: types.CallbackQuery, state: FSMContext):
+async def admin_course_add_auto_callback(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
         return await callback.answer("Ruxsat yo'q!", show_alert=True)
         
@@ -531,26 +550,151 @@ async def admin_course_add_auto_callback(callback: types.CallbackQuery, state: F
     next_number = max(numbers) + 1 if numbers else len(courses) + 1
     course_name = f"{next_number}-kurs 📚"
     
-    await state.update_data(course_name=course_name)
-    await state.set_state(AdminStates.waiting_for_course_url)
+    # Add course folder immediately without asking for a link!
+    success = db.add_course(name=course_name, description=f"{course_name} materiallari va darslari", webapp_url=None)
+    
+    if success:
+        await callback.answer(f"🎉 Yangi {course_name} muvaffaqiyatli yaratildi!", show_alert=True)
+        # Refresh current page view
+        courses = db.get_all_courses()
+        text, kb = get_courses_list_page(courses, page=999) # go to last page
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await callback.answer("❌ Xatolik yuz berdi. Kurs yaratilmadi.", show_alert=True)
+
+
+# --- Tests list & navigation inside Course Folder callbacks ---
+@router.callback_query(F.data.startswith("admin_course_manage_"))
+async def course_manage_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("Ruxsat yo'q!", show_alert=True)
+        
+    parts = callback.data.split("_")
+    course_id = int(parts[3])
+    course_idx = int(parts[4])
+    course_page = int(parts[5])
+    
+    courses = db.get_all_courses()
+    c = next((item for item in courses if item["id"] == course_id), None)
+    if not c:
+        return await callback.answer("Kurs topilmadi!", show_alert=True)
+        
+    tests = db.get_tests_for_course(course_id)
+    text, kb = get_course_tests_list_page(c, tests, course_idx, course_page, test_page=1)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("admin_test_page_"))
+async def test_page_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("Ruxsat yo'q!", show_alert=True)
+        
+    parts = callback.data.split("_")
+    course_id = int(parts[3])
+    course_idx = int(parts[4])
+    course_page = int(parts[5])
+    test_page = int(parts[6])
+    
+    courses = db.get_all_courses()
+    c = next((item for item in courses if item["id"] == course_id), None)
+    if not c:
+        return await callback.answer("Kurs topilmadi!", show_alert=True)
+        
+    tests = db.get_tests_for_course(course_id)
+    text, kb = get_course_tests_list_page(c, tests, course_idx, course_page, test_page=test_page)
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        pass
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("admin_test_list_"))
+async def test_list_callback(callback: types.CallbackQuery):
+    # Back button from a test card
+    parts = callback.data.split("_")
+    course_id = int(parts[3])
+    course_idx = int(parts[4])
+    course_page = int(parts[5])
+    test_page = int(parts[6])
+    
+    courses = db.get_all_courses()
+    c = next((item for item in courses if item["id"] == course_id), None)
+    tests = db.get_tests_for_course(course_id)
+    
+    text, kb = get_course_tests_list_page(c, tests, course_idx, course_page, test_page=test_page)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("admin_test_manage_"))
+async def test_manage_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("Ruxsat yo'q!", show_alert=True)
+        
+    parts = callback.data.split("_")
+    test_id = int(parts[3])
+    course_id = int(parts[4])
+    course_idx = int(parts[5])
+    course_page = int(parts[6])
+    test_idx = int(parts[7])
+    test_page = int(parts[8])
+    
+    courses = db.get_all_courses()
+    c = next((item for item in courses if item["id"] == course_id), None)
+    
+    tests = db.get_tests_for_course(course_id)
+    t = next((item for item in tests if item["id"] == test_id), None)
+    if not t:
+        return await callback.answer("Test topilmadi!", show_alert=True)
+        
+    text, kb = get_test_card(t, c["name"], course_idx, course_page, test_idx, test_page)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    await callback.answer()
+
+
+# --- Add Test to Course Flow ---
+@router.callback_query(F.data.startswith("admin_test_add_"))
+async def admin_test_add_callback(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("Ruxsat yo'q!", show_alert=True)
+        
+    parts = callback.data.split("_")
+    course_id = int(parts[3])
+    course_idx = int(parts[4])
+    course_page = int(parts[5])
+    
+    courses = db.get_all_courses()
+    c = next((item for item in courses if item["id"] == course_id), None)
+    
+    tests = db.get_tests_for_course(course_id)
+    next_test_number = len(tests) + 1
+    test_name = f"{next_test_number} - test"
+    
+    await state.set_state(AdminStates.waiting_for_test_url)
+    await state.update_data(
+        add_course_id=course_id,
+        add_test_name=test_name,
+        add_course_idx=course_idx,
+        add_course_page=course_page
+    )
     
     await callback.message.answer(
-        f"➕ <b>Yangi kurs qo'shish:</b>\n\n"
-        f"📚 Nomi: <b>{course_name}</b>\n\n"
-        f"Iltimos, ushbu yangi kurs uchun test/webapp havolasini yuboring:\n"
+        f"➕ <b>Test qo'shish</b>\n\n"
+        f"• Kurs: <b>{c['name']}</b>\n"
+        f"• Yangi test: <b>{test_name}</b>\n\n"
+        f"Iltimos, ushbu test uchun havola (URL) yuboring:\n"
         f"Bekor qilish uchun /cancel deb yozing.",
         parse_mode="HTML"
     )
     await callback.answer()
 
-@router.message(AdminStates.waiting_for_course_url)
-async def process_course_url(message: types.Message, state: FSMContext):
+@router.message(AdminStates.waiting_for_test_url)
+async def process_test_url(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
         
     if message.text == "/cancel":
         await state.clear()
-        await message.answer("❌ Kurs qo'shish bekor qilindi.")
+        await message.answer("❌ Test qo'shish bekor qilindi.")
         return
         
     url = message.text.strip()
@@ -559,49 +703,66 @@ async def process_course_url(message: types.Message, state: FSMContext):
         return
         
     data = await state.get_data()
-    course_name = data["course_name"]
+    course_id = data["add_course_id"]
+    test_name = data["add_test_name"]
     
-    success = db.add_course(name=course_name, description=f"{course_name} darslari va materiallari", webapp_url=url)
+    # Save test to database
+    success = db.add_test(course_id=course_id, name=test_name, webapp_url=url)
     await state.clear()
     
     if success:
         await message.answer(
-            f"🎉 <b>Kurs muvaffaqiyatli qo'shildi!</b>\n\n"
-            f"📚 Nomi: {course_name}\n"
+            f"🎉 <b>Test muvaffaqiyatli qo'shildi!</b>\n\n"
+            f"📝 Nomi: {test_name}\n"
             f"🔗 Havola: {url}",
             parse_mode="HTML"
         )
     else:
-        await message.answer("❌ Xatolik yuz berdi. Ushbu nomli kurs allaqachon mavjud bo'lishi mumkin.")
+        await message.answer("❌ Xatolik yuz berdi. Ushbu nomli test allaqachon mavjud bo'lishi mumkin.")
 
-@router.callback_query(F.data.startswith("admin_course_edit_url_"))
-async def admin_course_edit_url_callback(callback: types.CallbackQuery, state: FSMContext):
+
+# --- Edit Test Link Flow ---
+@router.callback_query(F.data.startswith("admin_test_edit_url_"))
+async def admin_test_edit_url_callback(callback: types.CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
         return await callback.answer("Ruxsat yo'q!", show_alert=True)
         
     parts = callback.data.split("_")
-    course_id = int(parts[4])
-    idx = int(parts[5])
-    page = int(parts[6])
+    test_id = int(parts[4])
+    course_id = int(parts[5])
+    course_idx = int(parts[6])
+    course_page = int(parts[7])
+    test_idx = int(parts[8])
+    test_page = int(parts[9])
     
     courses = db.get_all_courses()
     c = next((item for item in courses if item["id"] == course_id), None)
-    if not c:
-        return await callback.answer("Kurs topilmadi!", show_alert=True)
+    
+    tests = db.get_tests_for_course(course_id)
+    t = next((item for item in tests if item["id"] == test_id), None)
+    if not t:
+        return await callback.answer("Test topilmadi!", show_alert=True)
         
-    await state.set_state(AdminStates.waiting_for_course_edit_url)
-    await state.update_data(edit_course_id=course_id, edit_idx=idx, edit_page=page)
+    await state.set_state(AdminStates.waiting_for_test_edit_url)
+    await state.update_data(
+        edit_test_id=test_id,
+        edit_course_id=course_id,
+        edit_course_idx=course_idx,
+        edit_course_page=course_page,
+        edit_test_idx=test_idx,
+        edit_test_page=test_page
+    )
     
     await callback.message.answer(
-        f"🔗 <b>{c['name']} havolasini tahrirlash</b>\n\n"
-        f"Iltimos, ushbu kurs uchun yangi test havolasini yuboring:\n"
+        f"🔗 <b>{c['name']} - {t['name']} havolasini tahrirlash</b>\n\n"
+        f"Iltimos, ushbu test uchun yeni havolani yuboring:\n"
         f"Bekor qilish uchun /cancel deb yozing.",
         parse_mode="HTML"
     )
     await callback.answer()
 
-@router.message(AdminStates.waiting_for_course_edit_url)
-async def process_course_edit_url(message: types.Message, state: FSMContext):
+@router.message(AdminStates.waiting_for_test_edit_url)
+async def process_test_edit_url(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
         
@@ -616,36 +777,42 @@ async def process_course_edit_url(message: types.Message, state: FSMContext):
         return
         
     data = await state.get_data()
-    course_id = data["edit_course_id"]
+    test_id = data["edit_test_id"]
     
-    success = db.update_course_url(course_id, url)
+    success = db.update_test_url(test_id, url)
     await state.clear()
     
     if success:
-        await message.answer("✅ <b>Kurs havolasi muvaffaqiyatli yangilandi!</b>", parse_mode="HTML")
+        await message.answer("✅ <b>Test havolasi muvaffaqiyatli yangilandi!</b>", parse_mode="HTML")
     else:
         await message.answer("❌ Havolani yangilashda xatolik yuz berdi.")
 
-@router.callback_query(F.data.startswith("admin_course_delete_"))
-async def admin_course_delete_callback(callback: types.CallbackQuery):
+
+# --- Delete Test Callbacks ---
+@router.callback_query(F.data.startswith("admin_test_delete_"))
+async def admin_test_delete_callback(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
         return await callback.answer("Ruxsat yo'q!", show_alert=True)
         
     parts = callback.data.split("_")
-    course_id = int(parts[3])
-    idx = int(parts[4])
-    page = int(parts[5])
+    test_id = int(parts[3])
+    course_id = int(parts[4])
+    course_idx = int(parts[5])
+    course_page = int(parts[6])
+    test_idx = int(parts[7])
+    test_page = int(parts[8])
     
-    success = db.delete_course(course_id)
+    success = db.delete_test(test_id, course_id)
     if success:
-        await callback.answer("✅ Kurs o'chirildi!", show_alert=True)
+        await callback.answer("✅ Test o'chirildi va qolganlari qayta tartiblandi!", show_alert=True)
         courses = db.get_all_courses()
-        text, kb = get_courses_list_page(courses, page=page)
+        c = next((item for item in courses if item["id"] == course_id), None)
+        tests = db.get_tests_for_course(course_id)
+        
+        text, kb = get_course_tests_list_page(c, tests, course_idx, course_page, test_page=test_page)
         try:
             await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
     else:
-        await callback.answer("❌ Kursni o'chirib bo'lmadi.", show_alert=True)
-
-
+        await callback.answer("❌ Testni o'chirib bo'lmadi.", show_alert=True)

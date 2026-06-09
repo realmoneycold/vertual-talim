@@ -56,6 +56,14 @@ class Database:
                             webapp_url VARCHAR(500)
                         )
                     """)
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS tests (
+                            id SERIAL PRIMARY KEY,
+                            course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+                            name VARCHAR(255),
+                            webapp_url VARCHAR(500)
+                        )
+                    """)
                 else:
                     # SQLite syntax
                     cursor.execute("""
@@ -76,6 +84,14 @@ class Database:
                             webapp_url TEXT
                         )
                     """)
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS tests (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+                            name TEXT,
+                            webapp_url TEXT
+                        )
+                    """)
                 
                 # Check if courses are already populated, if not, load defaults
                 cursor.execute("SELECT COUNT(*) FROM courses")
@@ -90,6 +106,19 @@ class Database:
                             INSERT INTO courses (name, description, webapp_url)
                             VALUES ({self.q}, {self.q}, {self.q})
                         """, (name, desc, url))
+
+                # Check if tests table is empty, if so populate defaults for active courses
+                cursor.execute("SELECT COUNT(*) FROM tests")
+                if cursor.fetchone()[0] == 0:
+                    cursor.execute("SELECT id, webapp_url FROM courses WHERE webapp_url IS NOT NULL")
+                    active_courses = cursor.fetchall()
+                    for course_id, webapp_url in active_courses:
+                        for i in range(1, 6):
+                            test_name = f"{i} - test"
+                            cursor.execute(f"""
+                                INSERT INTO tests (course_id, name, webapp_url)
+                                VALUES ({self.q}, {self.q}, {self.q})
+                            """, (course_id, test_name, f"{webapp_url}?test={i}"))
             conn.commit()
 
         # Legacy migration (SQLite text file only)
@@ -336,4 +365,94 @@ class Database:
                 conn.commit()
                 return True
         except Exception:
+            return False
+
+    def get_tests_for_course(self, course_id: int) -> list[dict]:
+        """Gets all tests for a specific course ordered by id ASC."""
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(f"SELECT id, course_id, name, webapp_url FROM tests WHERE course_id = {self.q} ORDER BY id ASC", (course_id,))
+                rows = cursor.fetchall()
+                results = []
+                for row in rows:
+                    if self.use_postgres:
+                        results.append({
+                            "id": row[0],
+                            "course_id": row[1],
+                            "name": row[2],
+                            "webapp_url": row[3]
+                        })
+                    else:
+                        results.append(dict(row))
+                return results
+
+    def add_test(self, course_id: int, name: str, webapp_url: str) -> bool:
+        """Adds a new test to a course."""
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"""
+                        INSERT INTO tests (course_id, name, webapp_url)
+                        VALUES ({self.q}, {self.q}, {self.q})
+                    """, (course_id, name, webapp_url))
+                conn.commit()
+            self.resequence_tests(course_id)
+            return True
+        except Exception:
+            return False
+
+    def delete_test(self, test_id: int, course_id: int) -> bool:
+        """Deletes a test and resequences the remaining ones."""
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"DELETE FROM tests WHERE id = {self.q}", (test_id,))
+                conn.commit()
+            self.resequence_tests(course_id)
+            return True
+        except Exception:
+            return False
+
+    def update_test_url(self, test_id: int, webapp_url: str) -> bool:
+        """Updates the webapp_url of a specific test."""
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"UPDATE tests SET webapp_url = {self.q} WHERE id = {self.q}", (webapp_url, test_id))
+                conn.commit()
+                return True
+        except Exception:
+            return False
+
+    def resequence_tests(self, course_id: int) -> bool:
+        """Re-numbers and re-names all tests in a course sequentially (1-test, 2-test, etc.)."""
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"SELECT id, name, webapp_url FROM tests WHERE course_id = {self.q} ORDER BY id ASC", (course_id,))
+                    rows = cursor.fetchall()
+                    
+                    tests = []
+                    for row in rows:
+                        if self.use_postgres:
+                            tests.append({
+                                "id": row[0],
+                                "name": row[1],
+                                "webapp_url": row[2]
+                            })
+                        else:
+                            tests.append(dict(row))
+                            
+                    for index, t in enumerate(tests, start=1):
+                        new_name = f"{index} - test"
+                        cursor.execute(f"""
+                            UPDATE tests 
+                            SET name = {self.q} 
+                            WHERE id = {self.q}
+                        """, (new_name, t["id"]))
+                conn.commit()
+            return True
+        except Exception as e:
+            import logging
+            logging.error(f"Error resequencing tests for course {course_id}: {e}")
             return False
