@@ -117,6 +117,9 @@ class Database:
                 except Exception as e:
                     import logging
                     logging.error(f"Error migrating legacy users from {txt_file}: {e}")
+                    
+        # Force re-sequencing on startup to clean up any pre-existing out-of-order records
+        self.resequence_courses()
 
     def add_pending_user(self, user_id: int, username: str | None, full_name: str):
         """Adds a new user with pending status or updates their info if already exists."""
