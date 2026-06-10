@@ -66,6 +66,6 @@ async def help_handler(message: types.Message):
         "<i>Agar sizda ruxsat bo'lmasa, birinchi marta kirganingizda ruxsat so'rovi yuboriladi. Administratorlar tasdiqlashgandan so'ng bot faollashadi.</i>\n\n"
         "📞 <b>Aloqa va Yordam / Support Contact:</b>\n"
         "Agar biror muammo yuzaga kelsa, iltimos, administratorga murojaat qiling:\n"
-        "If you are experiencing any problems, please contact: @Irgashev_Physics_Teacher",
+        "If you are experiencing any problems, please contact: @Sattorovaadministrator",
         parse_mode="HTML"
     )
