@@ -4,17 +4,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "8841689690:AAEhSoesoSM289Wt8FLydCbkDenbs47ruyI")
     WEBAPP_URL: str = os.getenv("WEBAPP_URL", "https://gleaming-frangipane-336680.netlify.app/")
     DB_FILE: str = os.getenv("DB_FILE", "database.db")
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "") # Neon PostgreSQL Connection URI
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
-    # Parse list of integers from comma-separated string
-    ADMIN_IDS: list[int] = [
-        int(x.strip()) 
-        for x in os.getenv("ADMIN_IDS", "").split(",") 
-        if x.strip().isdigit()
-    ]
+
+    ADMIN_IDS: list[int] = [8978922616]  # Main admin
 
     @classmethod
     def validate(cls):

@@ -6,8 +6,8 @@ from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
 # --- SOZLAMALAR ---
-BOT_TOKEN = "8534683301:AAHWT4tuoix6uc9RMazpwNC_NhLXaBlFXBs"
-ADMIN_ID = 672335191
+BOT_TOKEN = "8841689690:AAEhSoesoSM289Wt8FLydCbkDenbs47ruyI"
+ADMIN_ID = 8978922616
 ALLOWED_USERS_FILE = "allowed_users.txt"
 
 logging.basicConfig(level=logging.INFO)
